@@ -1,0 +1,65 @@
+﻿{
+  "meta": {
+    "lastTouchedVersion": "2026.3.13",
+    "lastTouchedAt": "2026-03-28T13:59:40.577Z"
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "custom-goood-my": {
+        "baseUrl": "https://api.example.com/v1",
+        "apiKey": "sk-your-api-key-here",
+        "api": "openai-completions",
+        "headers": {
+          "User-Agent": "Mozilla/5.0"
+        },
+        "models": [
+          {
+            "id": "gpt-5.4",
+            "name": "gpt-5.4 (Custom Provider)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 16000,
+            "maxTokens": 4096,
+            "compat": {
+              "maxTokensField": "max_tokens"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "custom-goood-my/gpt-5.4"
+      },
+      "skipBootstrap": true
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "channels": {},
+  "gateway": {},
+  "plugins": {
+    "allow": [],
+    "slots": {},
+    "entries": {},
+    "installs": {}
+  }
+}

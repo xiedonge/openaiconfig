@@ -1,0 +1,21 @@
+[Unit]
+Description=Config Manager Web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=your-user
+Group=your-user
+WorkingDirectory=/opt/config-manager-web
+EnvironmentFile=/etc/config-manager-web/config-manager-web.env
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=config-manager-web
+
+[Install]
+WantedBy=multi-user.target

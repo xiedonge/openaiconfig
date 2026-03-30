@@ -1,0 +1,16 @@
+node_modules
+.next
+*.log
+.runtime-backups
+tsconfig.tsbuildinfo
+config.toml
+auth.json
+openclaw.json
+
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+.env
+.env.local
+.env.production
