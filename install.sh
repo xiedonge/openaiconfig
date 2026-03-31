@@ -219,6 +219,11 @@ main() {
   enable_service
 
   log "Installation completed."
+  log "Login URL: http://<server-ip>:$APP_PORT/login"
+  log "Admin username: ${ADMIN_USERNAME:-admin}"
+  log "If you passed ADMIN_PASSWORD, use that password to log in."
+  log "If you did not pass ADMIN_PASSWORD, use the generated password shown above."
+  log "Environment file: $ENV_FILE"
   log "Open http://<server-ip>:$APP_PORT/login to access the site."
 }
 

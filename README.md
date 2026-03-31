@@ -115,6 +115,29 @@ OPENCLAW_RESTART_COMMAND='openclaw gateway restart'
 
 如果不传 `ADMIN_PASSWORD` 或 `ADMIN_PASSWORD_HASH`，安装脚本会自动生成一个临时管理员密码，并在安装输出中打印一次。
 
+### 安装完成后怎么登录
+
+安装成功后，浏览器打开：
+
+```text
+http://你的服务器IP:3000/login
+```
+
+如果你安装时改过端口，就把 `3000` 换成你传入的 `APP_PORT`。
+
+登录账号规则：
+
+- 用户名：安装时传入的 `ADMIN_USERNAME`
+- 如果没有传，默认是 `admin`
+
+登录密码规则：
+
+- 如果安装时传了 `ADMIN_PASSWORD`，就用你传入的这个密码登录
+- 如果没有传 `ADMIN_PASSWORD`，安装脚本会自动生成一个临时密码，并在安装输出里打印一次
+- 如果你只传了 `ADMIN_PASSWORD_HASH`，那脚本不会知道明文密码，登录时请使用你自己生成这个哈希时对应的原始密码
+
+如果你忘了密码，最简单的做法是重新执行安装命令并传一个新的 `ADMIN_PASSWORD`，安装脚本会更新环境文件并重启服务。
+
 ## 主要路由
 
 - `/login`
