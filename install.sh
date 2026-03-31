@@ -57,7 +57,8 @@ resolve_user_home() {
 }
 
 random_string() {
-  tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${1:-32}"
+  local length="${1:-32}"
+  node -e "const crypto = require('node:crypto'); const length = Number(process.argv[1] || 32); const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'; let output = ''; while (output.length < length) { const bytes = crypto.randomBytes(length); for (const byte of bytes) { if (output.length >= length) break; output += chars[byte % chars.length]; } } process.stdout.write(output);" "$length"
 }
 
 ensure_packages() {
@@ -120,6 +121,7 @@ write_env_file() {
   local openclaw_dir="${OPENCLAW_CONFIG_DIR:-$app_home/.openclaw}"
   local data_dir="${DATA_DIR:-$INSTALL_DIR/data}"
 
+  log "Writing environment file to $ENV_FILE"
   mkdir -p "$ENV_DIR" "$data_dir"
   chown -R "$APP_USER:$APP_GROUP" "$data_dir"
 
@@ -171,6 +173,7 @@ write_service_file() {
   npm_bin="$(command -v npm)"
   [[ -n "$npm_bin" ]] || fail "npm was not found after installation."
 
+  log "Writing systemd unit to /etc/systemd/system/$SERVICE_NAME.service"
   cat >/etc/systemd/system/"$SERVICE_NAME".service <<EOF
 [Unit]
 Description=Config Manager Web
