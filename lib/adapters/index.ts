@@ -90,7 +90,17 @@ const codexAdapter: AppAdapter = {
         sourcePath: paths.configToml,
         transform(currentContent) {
           const parsed = TOML.parse(currentContent) as Record<string, unknown>;
-          parsed.base_url = config.url;
+          const providerName = typeof parsed.model_provider === "string" ? parsed.model_provider : null;
+          const providers = parsed.model_providers as Record<string, Record<string, unknown>> | undefined;
+
+          if (providerName && providers) {
+            const providerConfig = providers[providerName] ?? {};
+            providerConfig.base_url = config.url;
+            providers[providerName] = providerConfig;
+          } else {
+            parsed.base_url = config.url;
+          }
+
           return TOML.stringify(parsed as TOML.JsonMap);
         },
       },

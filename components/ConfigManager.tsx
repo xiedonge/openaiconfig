@@ -343,12 +343,12 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
         {error ? <div className="notice notice-error">{error}</div> : null}
 
         <div className="table-wrap">
-          <table className="data-table">
+          <table className="data-table config-table">
             <thead>
               <tr>
                 <th>名称</th>
-                <th>URL</th>
-                <th>API Key</th>
+                <th className="config-col-url">URL</th>
+                <th className="config-col-key">API Key</th>
                 <th>启用状态</th>
                 <th>最近应用</th>
                 <th>操作</th>
@@ -364,27 +364,27 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
               ) : (
                 filteredConfigs.map((config) => (
                   <tr key={config.id}>
-                    <td>
+                    <td className="config-col-name">
                       <strong>{config.name}</strong>
                       <div className="subtle">更新时间：{config.updatedAt}</div>
                     </td>
-                    <td className="secret-value">{config.url}</td>
-                    <td>
+                    <td className="config-col-url secret-value">{config.url}</td>
+                    <td className="config-col-key">
                       <div className="secret-value">{revealedIds[config.id] ? config.apiKey : maskSecret(config.apiKey)}</div>
                       <button className="button button-ghost" onClick={() => toggleSecret(config.id)} type="button">
                         {revealedIds[config.id] ? "隐藏" : "显示"}
                       </button>
                     </td>
-                    <td>
+                    <td className="config-col-status">
                       <span className={config.isActive ? "status-pill status-success" : "status-pill status-neutral"}>
                         {config.isActive ? "启用中" : "未启用"}
                       </span>
                     </td>
-                    <td>
+                    <td className="config-col-apply">
                       <span className={getStatusClass(config.lastApplyStatus)}>{config.lastApplyStatus}</span>
                       <div className="subtle">{config.lastApplyMessage ?? "尚未应用"}</div>
                     </td>
-                    <td>
+                    <td className="config-col-actions">
                       <div className="row-actions">
                         <button className="button button-secondary" onClick={() => handleEdit(config)} type="button">
                           编辑

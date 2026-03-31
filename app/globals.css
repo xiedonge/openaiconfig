@@ -120,6 +120,8 @@ a {
   border-radius: 14px;
   padding: 11px 16px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 
@@ -241,6 +243,34 @@ a {
   border-collapse: collapse;
 }
 
+.config-table {
+  min-width: 1120px;
+}
+
+.config-col-name {
+  min-width: 180px;
+}
+
+.config-col-url {
+  min-width: 220px;
+}
+
+.config-col-key {
+  min-width: 220px;
+}
+
+.config-col-status {
+  min-width: 110px;
+}
+
+.config-col-apply {
+  min-width: 180px;
+}
+
+.config-col-actions {
+  min-width: 236px;
+}
+
 .data-table th,
 .data-table td {
   padding: 14px 12px;
@@ -257,6 +287,15 @@ a {
 
 .data-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.34);
+}
+
+.config-col-key .button,
+.config-col-actions .button {
+  min-width: max-content;
+}
+
+.config-col-actions .row-actions {
+  min-width: max-content;
 }
 
 .secret-value {

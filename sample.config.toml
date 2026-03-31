@@ -1,2 +1,6 @@
-﻿base_url = "https://api.example.com/v1"
+model_provider = "cliproxyapi"
 model = "gpt-5.4"
+
+[model_providers.cliproxyapi]
+base_url = "https://api.example.com/v1"
+wire_api = "responses"
