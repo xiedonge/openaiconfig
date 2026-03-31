@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { FormEvent, useState } from "react";
+import { ClipboardEvent, FormEvent, useState } from "react";
 
 import { maskSecret } from "@/lib/utils";
 import type { AppType, ApplyStatus, ConfigRecord } from "@/types";
@@ -11,6 +11,12 @@ interface ConfigManagerProps {
 
 interface ConfigFormState {
   appType: AppType;
+  name: string;
+  url: string;
+  apiKey: string;
+}
+
+interface ParsedQuickPaste {
   name: string;
   url: string;
   apiKey: string;
@@ -41,10 +47,87 @@ async function readJson<T>(response: Response): Promise<T> {
   return (await response.json().catch(() => ({}))) as T;
 }
 
+function tryExtractByLabel(line: string, labels: string[]) {
+  for (const label of labels) {
+    const pattern = new RegExp(`^${label}\\s*[:：]\\s*(.+)$`, "i");
+    const matched = line.match(pattern);
+
+    if (matched?.[1]) {
+      return matched[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function parseQuickPaste(rawText: string): ParsedQuickPaste {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    throw new Error("请先粘贴内容。");
+  }
+
+  let name = "";
+  let url = "";
+  let apiKey = "";
+
+  for (const line of lines) {
+    if (!name) {
+      const labeledName = tryExtractByLabel(line, ["name", "名称", "标题"]);
+      if (labeledName) {
+        name = labeledName;
+        continue;
+      }
+    }
+
+    if (!url) {
+      const labeledUrl = tryExtractByLabel(line, ["url", "base_url", "base-url", "endpoint"]);
+      if (labeledUrl) {
+        url = labeledUrl;
+        continue;
+      }
+    }
+
+    if (!apiKey) {
+      const labeledApiKey = tryExtractByLabel(line, ["api[_ -]?key", "apikey", "key", "openai_api_key"]);
+      if (labeledApiKey) {
+        apiKey = labeledApiKey;
+        continue;
+      }
+    }
+  }
+
+  for (const line of lines) {
+    if (!url && /^https?:\/\/\S+$/i.test(line)) {
+      url = line;
+      continue;
+    }
+
+    if (!apiKey && !line.includes(" ") && !/^https?:\/\//i.test(line) && (line.startsWith("sk-") || line.length >= 16)) {
+      apiKey = line;
+      continue;
+    }
+
+    if (!name && line !== url && line !== apiKey) {
+      name = line;
+    }
+  }
+
+  if (!name || !url || !apiKey) {
+    throw new Error("未能完整识别名称、URL、API Key，请按三行格式或带标签格式粘贴。");
+  }
+
+  return { name, url, apiKey };
+}
+
 export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
   const [configs, setConfigs] = useState(initialConfigs);
   const [currentAppType, setCurrentAppType] = useState<AppType>("codex");
   const [form, setForm] = useState<ConfigFormState>(createEmptyForm("codex"));
+  const [quickPasteText, setQuickPasteText] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [revealedIds, setRevealedIds] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(false);
@@ -85,6 +168,7 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
   function resetForm(appType: AppType = currentAppType) {
     setEditingId(null);
     setForm(createEmptyForm(appType));
+    setQuickPasteText("");
   }
 
   function updateNotice(nextMessage: string | null, nextError: string | null = null) {
@@ -131,6 +215,7 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
       url: config.url,
       apiKey: config.apiKey,
     });
+    setQuickPasteText("");
     updateNotice(null, null);
   }
 
@@ -199,6 +284,37 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
     }));
     updateNotice(null, null);
     void loadConfigs(nextAppType);
+  }
+
+  function fillFormFromQuickPaste(rawText: string) {
+    const parsed = parseQuickPaste(rawText);
+    setForm((current) => ({
+      ...current,
+      name: parsed.name,
+      url: parsed.url,
+      apiKey: parsed.apiKey,
+    }));
+    updateNotice("已自动识别并填充名称、URL、API Key。", null);
+  }
+
+  function handleQuickPasteAction() {
+    try {
+      fillFormFromQuickPaste(quickPasteText);
+    } catch (parseError) {
+      updateNotice(null, parseError instanceof Error ? parseError.message : "识别粘贴内容失败。");
+    }
+  }
+
+  function handleQuickPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const text = event.clipboardData.getData("text");
+    event.preventDefault();
+    setQuickPasteText(text);
+
+    try {
+      fillFormFromQuickPaste(text);
+    } catch (parseError) {
+      updateNotice(null, parseError instanceof Error ? parseError.message : "识别粘贴内容失败。");
+    }
   }
 
   return (
@@ -300,6 +416,24 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
           <h2>{editingId ? "编辑配置" : "新增配置"}</h2>
         </div>
         <form className="form-grid" onSubmit={handleSubmit}>
+          <div className="field">
+            <label htmlFor="quick-paste">快速粘贴识别</label>
+            <textarea
+              id="quick-paste"
+              className="textarea"
+              onChange={(event) => setQuickPasteText(event.target.value)}
+              onPaste={handleQuickPaste}
+              placeholder={"支持直接粘贴三行内容，例如：\nxiaoxiao\nhttp://192.29.101.19:8317/\nsk-xxxx"}
+              rows={5}
+              value={quickPasteText}
+            />
+            <div className="field-actions">
+              <button className="button button-secondary" onClick={handleQuickPasteAction} type="button">
+                识别填充
+              </button>
+              <span className="subtle">支持三行格式，也支持 `名称: ...`、`URL: ...`、`API Key: ...` 这种格式。</span>
+            </div>
+          </div>
           <div className="field">
             <label htmlFor="form-appType">应用类型</label>
             <select

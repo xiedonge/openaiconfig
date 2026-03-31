@@ -31,7 +31,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -162,7 +163,8 @@ a {
 }
 
 .input,
-.select {
+.select,
+.textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -172,9 +174,15 @@ a {
 }
 
 .input:focus,
-.select:focus {
+.select:focus,
+.textarea:focus {
   outline: 2px solid rgba(152, 92, 45, 0.24);
   border-color: rgba(152, 92, 45, 0.35);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 120px;
 }
 
 .panel-grid {
