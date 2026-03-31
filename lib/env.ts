@@ -66,6 +66,16 @@ export function getSessionTtlSeconds() {
   return parsed;
 }
 
+export function getSessionCookieSecure() {
+  const rawValue = process.env.SESSION_COOKIE_SECURE?.trim().toLowerCase();
+
+  if (!rawValue) {
+    return false;
+  }
+
+  return ["1", "true", "yes", "on"].includes(rawValue);
+}
+
 export function getOpenClawRestartCommand() {
   return process.env.OPENCLAW_RESTART_COMMAND ?? "openclaw gateway restart";
 }

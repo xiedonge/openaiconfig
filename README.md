@@ -57,6 +57,7 @@ CODEX_CONFIG_DIR=/home/your-user/.codex
 OPENCLAW_CONFIG_DIR=/home/your-user/.openclaw
 OPENCLAW_PROVIDER_KEY=custom-goood-my
 OPENCLAW_RESTART_COMMAND=openclaw gateway restart
+SESSION_COOKIE_SECURE=false
 ```
 
 说明：
@@ -104,6 +105,7 @@ CODEX_CONFIG_DIR=/home/your-linux-user/.codex
 OPENCLAW_CONFIG_DIR=/home/your-linux-user/.openclaw
 OPENCLAW_PROVIDER_KEY=custom-goood-my
 OPENCLAW_RESTART_COMMAND='openclaw gateway restart'
+SESSION_COOKIE_SECURE=false
 ```
 
 安装完成后：
