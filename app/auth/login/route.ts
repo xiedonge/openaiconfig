@@ -4,10 +4,18 @@ import { authenticateAdmin } from "@/lib/auth";
 import { createSession } from "@/lib/session";
 import { validateLoginInput } from "@/lib/validation";
 
-function redirectToLogin(request: Request, message: string) {
-  const url = new URL("/login", request.url);
-  url.searchParams.set("error", message);
-  return NextResponse.redirect(url, { status: 303 });
+function redirectWithLocation(location: string) {
+  return new NextResponse(null, {
+    status: 303,
+    headers: {
+      Location: location,
+    },
+  });
+}
+
+function redirectToLogin(message: string) {
+  const searchParams = new URLSearchParams({ error: message });
+  return redirectWithLocation(`/login?${searchParams.toString()}`);
 }
 
 export async function POST(request: Request) {
@@ -21,13 +29,13 @@ export async function POST(request: Request) {
     const authenticated = authenticateAdmin(input.username, input.password);
 
     if (!authenticated) {
-      return redirectToLogin(request, "用户名或密码错误。");
+      return redirectToLogin("用户名或密码错误。");
     }
 
     await createSession(input.username);
-    return NextResponse.redirect(new URL("/configs", request.url), { status: 303 });
+    return redirectWithLocation("/configs");
   } catch (error) {
     const message = error instanceof Error ? error.message : "登录失败。";
-    return redirectToLogin(request, message);
+    return redirectToLogin(message);
   }
 }
