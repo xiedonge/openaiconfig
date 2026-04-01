@@ -25,6 +25,11 @@ fail() {
   exit 1
 }
 
+set_running_status() {
+  local message="$1"
+  write_status "running" "$message" "$STARTED_AT" "" "$CURRENT_HEAD" "$TARGET_HEAD"
+}
+
 write_status() {
   local state="$1"
   local message="$2"
@@ -92,9 +97,11 @@ main() {
   write_status "running" "Update started in background." "$STARTED_AT"
 
   CURRENT_STEP="read current version"
+  set_running_status "Reading current version."
   CURRENT_HEAD="$(git -C "$INSTALL_DIR" rev-parse HEAD)"
 
   CURRENT_STEP="fetch remote updates"
+  set_running_status "Fetching remote updates."
   log "Fetching latest changes from $REPO_URL ($REPO_REF)"
   git -C "$INSTALL_DIR" remote set-url origin "$REPO_URL"
   git -C "$INSTALL_DIR" fetch --tags origin
@@ -115,19 +122,23 @@ main() {
   fi
 
   CURRENT_STEP="update code"
+  set_running_status "Updating application code."
   log "Updating $CURRENT_HEAD -> $TARGET_HEAD"
   git -C "$INSTALL_DIR" reset --hard "$TARGET_HEAD"
   chown -R "$APP_USER:$APP_GROUP" "$INSTALL_DIR"
 
   CURRENT_STEP="install dependencies"
+  set_running_status "Installing dependencies."
   log "Installing npm dependencies"
   run_as_app_user "cd '$INSTALL_DIR' && npm ci"
 
   CURRENT_STEP="build application"
+  set_running_status "Building application."
   log "Building production bundle"
   run_as_app_user "cd '$INSTALL_DIR' && npm run build"
 
   CURRENT_STEP="restart service"
+  set_running_status "Restarting web service."
   log "Reloading systemd and restarting $SERVICE_NAME"
   systemctl daemon-reload
   systemctl restart "$SERVICE_NAME"

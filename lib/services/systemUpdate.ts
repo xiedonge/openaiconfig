@@ -7,6 +7,7 @@ import { getDataDirectory, getUpdateServiceName, getUpdateStatusFilePath } from 
 import type { SystemUpdateStatus } from "@/types";
 
 const execFileAsync = promisify(execFile);
+const STALE_RUNNING_MS = 30 * 60 * 1000;
 
 const DEFAULT_STATUS: SystemUpdateStatus = {
   state: "idle",
@@ -30,10 +31,35 @@ function normalizeStatus(input: Partial<SystemUpdateStatus>): SystemUpdateStatus
   };
 }
 
+function isRunningStatusStale(status: SystemUpdateStatus) {
+  if (status.state !== "running" || !status.updatedAt) {
+    return false;
+  }
+
+  const updatedAt = Date.parse(status.updatedAt);
+
+  if (Number.isNaN(updatedAt)) {
+    return false;
+  }
+
+  return Date.now() - updatedAt > STALE_RUNNING_MS;
+}
+
 export async function readSystemUpdateStatus() {
   try {
     const content = await fs.readFile(getUpdateStatusFilePath(), "utf8");
-    return normalizeStatus(JSON.parse(content) as Partial<SystemUpdateStatus>);
+    const status = normalizeStatus(JSON.parse(content) as Partial<SystemUpdateStatus>);
+
+    if (!isRunningStatusStale(status)) {
+      return status;
+    }
+
+    return await writeSystemUpdateStatus({
+      ...status,
+      state: "failed",
+      message: "\u4e0a\u4e00\u6b21\u66f4\u65b0\u72b6\u6001\u5df2\u8d85\u65f6\uff0c\u53ef\u80fd\u5df2\u4e2d\u65ad\uff0c\u8bf7\u91cd\u65b0\u70b9\u51fb\u66f4\u65b0\u3002",
+      finishedAt: new Date().toISOString(),
+    });
   } catch {
     return DEFAULT_STATUS;
   }
