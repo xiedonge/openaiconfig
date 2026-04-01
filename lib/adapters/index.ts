@@ -19,9 +19,16 @@ export interface AppAdapter {
   runPostAction(stage: PostActionStage): Promise<string | null>;
 }
 
+type JsonObject = Record<string, unknown>;
+type OpenClawProvider = JsonObject & { baseUrl?: string; apiKey?: string };
+
 function getRestartTimeoutMs() {
   const parsed = Number.parseInt(process.env.OPENCLAW_RESTART_TIMEOUT_MS ?? "30000", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 30000;
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function runShellCommand(command: string) {
@@ -38,7 +45,7 @@ function runShellCommand(command: string) {
     const timeout = setTimeout(() => {
       settled = true;
       child.kill();
-      reject(new Error(`Command timed out after ${getRestartTimeoutMs()}ms.`));
+      reject(new Error(`Command '${command}' timed out after ${getRestartTimeoutMs()}ms.`));
     }, getRestartTimeoutMs());
 
     child.stdout?.on("data", (chunk) => {
@@ -56,7 +63,7 @@ function runShellCommand(command: string) {
 
       settled = true;
       clearTimeout(timeout);
-      reject(error);
+      reject(new Error(`Failed to run command '${command}': ${error.message}`));
     });
 
     child.on("close", (code) => {
@@ -72,9 +79,64 @@ function runShellCommand(command: string) {
         return;
       }
 
-      reject(new Error(stderr.trim() || stdout.trim() || `Command exited with code ${code ?? "unknown"}.`));
+      const details = stderr.trim() || stdout.trim() || `Command exited with code ${code ?? "unknown"}.`;
+      reject(new Error(`Command '${command}' failed: ${details}`));
     });
   });
+}
+
+function parseJsonObject(content: string, fileName: string) {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+
+    if (!isJsonObject(parsed)) {
+      throw new Error(`${fileName} must contain a JSON object.`);
+    }
+
+    return parsed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown JSON parse error.";
+    throw new Error(`Failed to parse ${fileName}: ${message}`);
+  }
+}
+
+function resolveOpenClawProvider(
+  providers: Record<string, unknown> | undefined,
+  configuredProviderKey: string,
+) {
+  if (!isJsonObject(providers)) {
+    throw new Error("models.providers was not found in openclaw.json.");
+  }
+
+  const candidateKeys = Array.from(new Set([configuredProviderKey, "custom-goood-my", "custom-good-my"]));
+
+  for (const key of candidateKeys) {
+    const provider = providers[key];
+
+    if (isJsonObject(provider)) {
+      return { providerKey: key, provider };
+    }
+  }
+
+  const availableKeys = Object.keys(providers);
+
+  if (availableKeys.length === 1) {
+    const providerKey = availableKeys[0]!;
+    const provider = providers[providerKey];
+
+    if (!isJsonObject(provider)) {
+      throw new Error(`Provider '${providerKey}' in openclaw.json is not a JSON object.`);
+    }
+
+    return {
+      providerKey,
+      provider,
+    };
+  }
+
+  throw new Error(
+    `Provider '${configuredProviderKey}' was not found in openclaw.json. Available providers: ${availableKeys.join(", ") || "none"}.`,
+  );
 }
 
 const codexAdapter: AppAdapter = {
@@ -107,7 +169,7 @@ const codexAdapter: AppAdapter = {
       {
         sourcePath: paths.authJson,
         transform(currentContent) {
-          const parsed = JSON.parse(currentContent) as Record<string, unknown>;
+          const parsed = parseJsonObject(currentContent, "auth.json");
           parsed.OPENAI_API_KEY = config.apiKey;
           return `${JSON.stringify(parsed, null, 2)}\n`;
         },
@@ -132,17 +194,13 @@ const openClawAdapter: AppAdapter = {
       {
         sourcePath: paths.configJson,
         transform(currentContent) {
-          const parsed = JSON.parse(currentContent) as {
+          const parsed = parseJsonObject(currentContent, "openclaw.json") as {
             models?: {
-              providers?: Record<string, { baseUrl?: string; apiKey?: string }>;
+              providers?: Record<string, unknown>;
             };
           };
 
-          const provider = parsed.models?.providers?.[providerKey];
-
-          if (!provider) {
-            throw new Error(`Provider '${providerKey}' was not found in openclaw.json.`);
-          }
+          const { provider } = resolveOpenClawProvider(parsed.models?.providers, providerKey);
 
           provider.baseUrl = config.url;
           provider.apiKey = config.apiKey;
