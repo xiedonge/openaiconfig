@@ -4,6 +4,45 @@ import { useState } from "react";
 
 import type { BackupScope, BackupSetRecord, TriggerType } from "@/types";
 
+const TEXT = {
+  totalPrefix: "\u5171 ",
+  totalSuffix: " \u6761\u5907\u4efd\u8bb0\u5f55",
+  loadFailed: "\u52a0\u8f7d\u5907\u4efd\u5931\u8d25\u3002",
+  restoreConfirmPrefix: "\u786e\u8ba4\u8fd8\u539f\u5907\u4efd #",
+  restoreConfirmSuffix: "\u5417\uff1f\u7cfb\u7edf\u4f1a\u5148\u751f\u6210\u4e00\u4efd\u65b0\u7684\u8fd8\u539f\u524d\u5907\u4efd\u3002",
+  restoreFailed: "\u8fd8\u539f\u5907\u4efd\u5931\u8d25\u3002",
+  restoreSuccessPrefix: "\u5907\u4efd #",
+  restoreSuccessSuffix: " \u5df2\u8fd8\u539f\u3002",
+  scope: "\u8303\u56f4",
+  all: "\u5168\u90e8",
+  trigger: "\u89e6\u53d1\u6765\u6e90",
+  activate: "\u542f\u7528\u524d\u5907\u4efd",
+  restore: "\u8fd8\u539f\u524d\u5907\u4efd",
+  processing: "\u5904\u7406\u4e2d...",
+  backupId: "\u5907\u4efd\u7f16\u53f7",
+  relatedConfig: "\u5173\u8054\u914d\u7f6e",
+  createdAt: "\u521b\u5efa\u65f6\u95f4",
+  recentRestore: "\u6700\u8fd1\u8fd8\u539f",
+  actions: "\u64cd\u4f5c",
+  empty: "\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u4e0b\u6ca1\u6709\u5907\u4efd\u8bb0\u5f55\u3002",
+  includeFilesPrefix: "\u5305\u542b ",
+  includeFilesSuffix: " \u4e2a\u6587\u4ef6",
+  deletedRelated: "\u5173\u8054\u914d\u7f6e\u5df2\u5220\u9664\u6216\u672a\u5173\u8054",
+  notRestored: "\u5c1a\u672a\u8fd8\u539f",
+  view: "\u67e5\u770b",
+  details: "\u5907\u4efd\u8be6\u60c5",
+  postAction: "\u540e\u7f6e\u52a8\u4f5c\uff1a",
+  triggerPrefix: "\u89e6\u53d1\u6765\u6e90\uff1a",
+  scopePrefix: "\u8303\u56f4\uff1a",
+  relatedPrefix: "\u5173\u8054\u914d\u7f6e\uff1a",
+  createdPrefix: "\u521b\u5efa\u65f6\u95f4\uff1a",
+  postActionResultPrefix: "\u540e\u7f6e\u52a8\u4f5c\u7ed3\u679c\uff1a",
+  notExecuted: "\u5c1a\u672a\u6267\u884c",
+  sourcePath: "\u539f\u59cb\u8def\u5f84\uff1a",
+  backupPath: "\u5907\u4efd\u8def\u5f84\uff1a",
+  selectHint: "\u5148\u4ece\u5de6\u4fa7\u9009\u62e9\u4e00\u6761\u5907\u4efd\u67e5\u770b\u660e\u7ec6\u3002",
+} as const;
+
 interface BackupManagerProps {
   initialBackups: BackupSetRecord[];
 }
@@ -28,10 +67,6 @@ function getStatusClass(status: BackupSetRecord["lastRestoreStatus"]) {
 }
 
 function formatScope(scope: BackupScope) {
-  if (scope === "shared") {
-    return "shared";
-  }
-
   return scope;
 }
 
@@ -45,7 +80,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
   const [error, setError] = useState<string | null>(null);
 
   const selectedBackup = backups.find((backup) => backup.id === selectedBackupId) ?? null;
-  const backupCountText = `共 ${backups.length} 条备份记录`;
+  const backupCountText = `${TEXT.totalPrefix}${backups.length}${TEXT.totalSuffix}`;
 
   async function loadBackups(nextScopeFilter: ScopeFilter = scopeFilter, nextTriggerFilter: TriggerFilter = triggerFilter) {
     setLoading(true);
@@ -67,7 +102,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
       const payload = await readJson<{ backups?: BackupSetRecord[]; error?: string }>(response);
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "加载备份失败。");
+        throw new Error(payload.error ?? TEXT.loadFailed);
       }
 
       const nextBackups = payload.backups ?? [];
@@ -75,14 +110,14 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
       setSelectedBackupId((current) => (nextBackups.some((backup) => backup.id === current) ? current : nextBackups[0]?.id ?? null));
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "加载备份失败。");
+      setError(loadError instanceof Error ? loadError.message : TEXT.loadFailed);
     } finally {
       setLoading(false);
     }
   }
 
   async function handleRestore(backup: BackupSetRecord) {
-    const confirmed = window.confirm(`确认还原备份 #${backup.id} 吗？系统会先生成一份新的还原前备份。`);
+    const confirmed = window.confirm(`${TEXT.restoreConfirmPrefix}${backup.id}${TEXT.restoreConfirmSuffix}`);
 
     if (!confirmed) {
       return;
@@ -99,14 +134,14 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
       const payload = await readJson<{ error?: string }>(response);
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "还原备份失败。");
+        throw new Error(payload.error ?? TEXT.restoreFailed);
       }
 
-      setMessage(`备份 #${backup.id} 已还原。`);
+      setMessage(`${TEXT.restoreSuccessPrefix}${backup.id}${TEXT.restoreSuccessSuffix}`);
       await loadBackups(scopeFilter, triggerFilter);
       setSelectedBackupId(backup.id);
     } catch (restoreError) {
-      setError(restoreError instanceof Error ? restoreError.message : "还原备份失败。");
+      setError(restoreError instanceof Error ? restoreError.message : TEXT.restoreFailed);
     } finally {
       setLoading(false);
     }
@@ -117,7 +152,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
       <section className="card stack">
         <div className="page-actions">
           <div className="field" style={{ minWidth: 220 }}>
-            <label htmlFor="backup-scope-filter">范围</label>
+            <label htmlFor="backup-scope-filter">{TEXT.scope}</label>
             <select
               id="backup-scope-filter"
               className="select"
@@ -128,14 +163,14 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
               }}
               value={scopeFilter}
             >
-              <option value="all">全部</option>
+              <option value="all">{TEXT.all}</option>
               <option value="shared">shared</option>
               <option value="codex">codex</option>
               <option value="openclaw">openclaw</option>
             </select>
           </div>
           <div className="field" style={{ minWidth: 220 }}>
-            <label htmlFor="backup-trigger-filter">触发来源</label>
+            <label htmlFor="backup-trigger-filter">{TEXT.trigger}</label>
             <select
               id="backup-trigger-filter"
               className="select"
@@ -146,12 +181,12 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
               }}
               value={triggerFilter}
             >
-              <option value="all">全部</option>
-              <option value="activate">启用前备份</option>
-              <option value="restore">还原前备份</option>
+              <option value="all">{TEXT.all}</option>
+              <option value="activate">{TEXT.activate}</option>
+              <option value="restore">{TEXT.restore}</option>
             </select>
           </div>
-          <span className="subtle">{loading ? "处理中..." : backupCountText}</span>
+          <span className="subtle">{loading ? TEXT.processing : backupCountText}</span>
         </div>
 
         {message ? <div className="notice notice-success">{message}</div> : null}
@@ -161,20 +196,20 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
           <table className="data-table">
             <thead>
               <tr>
-                <th>备份编号</th>
-                <th>范围</th>
-                <th>触发来源</th>
-                <th>关联配置</th>
-                <th>创建时间</th>
-                <th>最近还原</th>
-                <th>操作</th>
+                <th>{TEXT.backupId}</th>
+                <th>{TEXT.scope}</th>
+                <th>{TEXT.trigger}</th>
+                <th>{TEXT.relatedConfig}</th>
+                <th>{TEXT.createdAt}</th>
+                <th>{TEXT.recentRestore}</th>
+                <th>{TEXT.actions}</th>
               </tr>
             </thead>
             <tbody>
               {backups.length === 0 ? (
                 <tr>
                   <td colSpan={7}>
-                    <div className="empty-state">当前筛选条件下没有备份记录。</div>
+                    <div className="empty-state">{TEXT.empty}</div>
                   </td>
                 </tr>
               ) : (
@@ -182,23 +217,23 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
                   <tr key={backup.id}>
                     <td>
                       <strong>#{backup.id}</strong>
-                      <div className="subtle">包含 {backup.files.length} 个文件</div>
+                      <div className="subtle">{`${TEXT.includeFilesPrefix}${backup.files.length}${TEXT.includeFilesSuffix}`}</div>
                     </td>
                     <td>{formatScope(backup.scope)}</td>
-                    <td>{backup.triggerType === "activate" ? "启用前备份" : "还原前备份"}</td>
-                    <td>{backup.relatedConfigName ?? "关联配置已删除或未关联"}</td>
+                    <td>{backup.triggerType === "activate" ? TEXT.activate : TEXT.restore}</td>
+                    <td>{backup.relatedConfigName ?? TEXT.deletedRelated}</td>
                     <td>{backup.createdAt}</td>
                     <td>
                       <span className={getStatusClass(backup.lastRestoreStatus)}>{backup.lastRestoreStatus}</span>
-                      <div className="subtle">{backup.lastRestoreMessage ?? "尚未还原"}</div>
+                      <div className="subtle">{backup.lastRestoreMessage ?? TEXT.notRestored}</div>
                     </td>
                     <td>
                       <div className="row-actions">
                         <button className="button button-secondary" onClick={() => setSelectedBackupId(backup.id)} type="button">
-                          查看
+                          {TEXT.view}
                         </button>
                         <button className="button button-primary" onClick={() => handleRestore(backup)} type="button">
-                          还原
+                          {TEXT.restore}
                         </button>
                       </div>
                     </td>
@@ -214,36 +249,58 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
         {selectedBackup ? (
           <>
             <div>
-              <p className="subtle">备份详情</p>
-              <h2>备份 #{selectedBackup.id}</h2>
+              <p className="subtle">{TEXT.details}</p>
+              <h2>#{selectedBackup.id}</h2>
               <div className="inline-meta">
                 <span className="status-pill status-neutral">{formatScope(selectedBackup.scope)}</span>
                 <span className={getStatusClass(selectedBackup.postActionStatus)}>
-                  后置动作：{selectedBackup.postActionStatus}
+                  {TEXT.postAction}
+                  {selectedBackup.postActionStatus}
                 </span>
               </div>
             </div>
 
             <div className="notice">
-              <div>触发来源：{selectedBackup.triggerType === "activate" ? "启用前备份" : "还原前备份"}</div>
-              <div>范围：{formatScope(selectedBackup.scope)}</div>
-              <div>关联配置：{selectedBackup.relatedConfigName ?? "已删除或未关联"}</div>
-              <div>创建时间：{selectedBackup.createdAt}</div>
-              <div>后置动作结果：{selectedBackup.postActionMessage ?? "尚未执行"}</div>
+              <div>
+                {TEXT.triggerPrefix}
+                {selectedBackup.triggerType === "activate" ? TEXT.activate : TEXT.restore}
+              </div>
+              <div>
+                {TEXT.scopePrefix}
+                {formatScope(selectedBackup.scope)}
+              </div>
+              <div>
+                {TEXT.relatedPrefix}
+                {selectedBackup.relatedConfigName ?? TEXT.deletedRelated}
+              </div>
+              <div>
+                {TEXT.createdPrefix}
+                {selectedBackup.createdAt}
+              </div>
+              <div>
+                {TEXT.postActionResultPrefix}
+                {selectedBackup.postActionMessage ?? TEXT.notExecuted}
+              </div>
             </div>
 
             <div className="backup-files">
               {selectedBackup.files.map((file) => (
                 <div className="file-chip" key={file.id}>
                   <strong>{file.fileName}</strong>
-                  <div className="subtle">原始路径：{file.sourcePath}</div>
-                  <div className="subtle">备份路径：{file.backupPath}</div>
+                  <div className="subtle">
+                    {TEXT.sourcePath}
+                    {file.sourcePath}
+                  </div>
+                  <div className="subtle">
+                    {TEXT.backupPath}
+                    {file.backupPath}
+                  </div>
                 </div>
               ))}
             </div>
           </>
         ) : (
-          <div className="empty-state">先从左侧选择一条备份查看明细。</div>
+          <div className="empty-state">{TEXT.selectHint}</div>
         )}
       </aside>
     </div>

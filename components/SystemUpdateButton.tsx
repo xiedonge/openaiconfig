@@ -6,13 +6,31 @@ import type { SystemUpdateStatus } from "@/types";
 
 const RUNNING_STALE_WARNING_MS = 2 * 60 * 1000;
 
+const TEXT = {
+  idle: "\u5c1a\u672a\u6267\u884c\u7f51\u7ad9\u66f4\u65b0\u3002",
+  runningStale:
+    "\u66f4\u65b0\u72b6\u6001\u8d85\u8fc7 2 \u5206\u949f\u6ca1\u6709\u53d8\u5316\uff0c\u53ef\u80fd\u5361\u5728 git\u3001npm \u6216\u670d\u52a1\u91cd\u542f\u9636\u6bb5\uff0c\u53ef\u5728\u670d\u52a1\u5668\u4e0a\u6267\u884c journalctl -u config-manager-web-update -n 100 --no-pager \u6392\u67e5\u3002",
+  loadFailed: "\u52a0\u8f7d\u66f4\u65b0\u72b6\u6001\u5931\u8d25\u3002",
+  restartHint: "\u66f4\u65b0\u4e2d\uff0c\u670d\u52a1\u53ef\u80fd\u6b63\u5728\u91cd\u542f\uff0c\u8bf7\u7a0d\u540e\u624b\u52a8\u5237\u65b0\u9875\u9762\u3002",
+  startFailed: "\u542f\u52a8\u66f4\u65b0\u5931\u8d25\u3002",
+  updateRunning: "\u66f4\u65b0\u4e2d...",
+  updateWebsite: "\u66f4\u65b0\u7f51\u7ad9",
+  refreshStatus: "\u5237\u65b0\u72b6\u6001",
+  loading: "\u52a0\u8f7d\u4e2d",
+  running: "\u66f4\u65b0\u4e2d",
+  success: "\u5df2\u5b8c\u6210",
+  failed: "\u5931\u8d25",
+  pending: "\u5f85\u66f4\u65b0",
+  recentTime: "\u6700\u8fd1\u65f6\u95f4\uff1a",
+} as const;
+
 function decodeEscapedUnicodeText(value: string) {
   return value.replace(/\\u([0-9a-fA-F]{4})/g, (_, code) => String.fromCharCode(Number.parseInt(code, 16)));
 }
 
 const DEFAULT_STATUS: SystemUpdateStatus = {
   state: "idle",
-  message: "\u5c1a\u672a\u6267\u884c\u7f51\u7ad9\u66f4\u65b0\u3002",
+  message: TEXT.idle,
   startedAt: null,
   finishedAt: null,
   fromCommit: null,
@@ -38,6 +56,10 @@ function formatTime(value: string | null) {
   return date.toLocaleString();
 }
 
+function normalizeMessage(value: string) {
+  return decodeEscapedUnicodeText(value);
+}
+
 export default function SystemUpdateButton() {
   const [status, setStatus] = useState<SystemUpdateStatus>(DEFAULT_STATUS);
   const [loading, setLoading] = useState(true);
@@ -55,9 +77,7 @@ export default function SystemUpdateButton() {
       return null;
     }
 
-    return decodeEscapedUnicodeText(
-      String.raw`\u66f4\u65b0\u72b6\u6001\u5df2\u8d85\u8fc7 2 \u5206\u949f\u6ca1\u6709\u53d8\u5316\uff0c\u53ef\u80fd\u5361\u5728 git\u3001npm \u6216\u670d\u52a1\u91cd\u542f\u9636\u6bb5\uff0c\u53ef\u5728\u670d\u52a1\u5668\u4e0a\u6267\u884c journalctl -u config-manager-web-update -n 100 --no-pager \u6392\u67e5\u3002`,
-    );
+    return TEXT.runningStale;
   }
 
   async function loadStatus() {
@@ -68,16 +88,17 @@ export default function SystemUpdateButton() {
       const payload = await readJson<{ status?: SystemUpdateStatus; error?: string }>(response);
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "\u52a0\u8f7d\u66f4\u65b0\u72b6\u6001\u5931\u8d25\u3002");
+        throw new Error(payload.error ?? TEXT.loadFailed);
       }
 
-      setStatus(payload.status ?? DEFAULT_STATUS);
-      setError(getRunningWarning(payload.status ?? DEFAULT_STATUS));
+      const nextStatus = payload.status ?? DEFAULT_STATUS;
+      setStatus(nextStatus);
+      setError(getRunningWarning(nextStatus));
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "\u52a0\u8f7d\u66f4\u65b0\u72b6\u6001\u5931\u8d25\u3002";
+      const message = loadError instanceof Error ? normalizeMessage(loadError.message) : TEXT.loadFailed;
 
       if (status.state === "running") {
-        setError("\u66f4\u65b0\u4e2d\uff0c\u670d\u52a1\u53ef\u80fd\u6b63\u5728\u91cd\u542f\uff0c\u8bf7\u7a0d\u540e\u624b\u52a8\u5237\u65b0\u9875\u9762\u3002");
+        setError(TEXT.restartHint);
       } else {
         setError(message);
       }
@@ -113,34 +134,32 @@ export default function SystemUpdateButton() {
       const payload = await readJson<{ status?: SystemUpdateStatus; error?: string }>(response);
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "\u542f\u52a8\u66f4\u65b0\u5931\u8d25\u3002");
+        throw new Error(payload.error ?? TEXT.startFailed);
       }
 
-      setStatus(payload.status ?? DEFAULT_STATUS);
-      setError(getRunningWarning(payload.status ?? DEFAULT_STATUS));
+      const nextStatus = payload.status ?? DEFAULT_STATUS;
+      setStatus(nextStatus);
+      setError(getRunningWarning(nextStatus));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "\u542f\u52a8\u66f4\u65b0\u5931\u8d25\u3002");
+      const message = submitError instanceof Error ? normalizeMessage(submitError.message) : TEXT.startFailed;
+      setError(message);
     } finally {
       setSubmitting(false);
     }
   }
 
-  const statusText = decodeEscapedUnicodeText(error ?? status.message);
+  const statusText = normalizeMessage(error ?? status.message);
   const timeText = formatTime(status.updatedAt ?? status.finishedAt ?? status.startedAt);
   const buttonDisabled = submitting || status.state === "running";
-  const refreshLabel = decodeEscapedUnicodeText(String.raw`\u5237\u65b0\u72b6\u6001`);
-  const updateLabel = buttonDisabled
-    ? decodeEscapedUnicodeText(String.raw`\u66f4\u65b0\u4e2d...`)
-    : decodeEscapedUnicodeText(String.raw`\u66f4\u65b0\u7f51\u7ad9`);
 
   return (
     <div className="system-update-box">
       <div className="field-actions">
         <button className="button button-secondary" disabled={buttonDisabled} onClick={handleUpdate} type="button">
-          {updateLabel}
+          {buttonDisabled ? TEXT.updateRunning : TEXT.updateWebsite}
         </button>
         <button className="button button-ghost" disabled={loading} onClick={() => void loadStatus()} type="button">
-          {refreshLabel}
+          {TEXT.refreshStatus}
         </button>
       </div>
       <div className="system-update-meta">
@@ -154,19 +173,19 @@ export default function SystemUpdateButton() {
           }`}
         >
           {loading
-            ? decodeEscapedUnicodeText(String.raw`\u52a0\u8f7d\u4e2d`)
+            ? TEXT.loading
             : status.state === "running"
-              ? decodeEscapedUnicodeText(String.raw`\u66f4\u65b0\u4e2d`)
+              ? TEXT.running
               : status.state === "success"
-                ? decodeEscapedUnicodeText(String.raw`\u5df2\u5b8c\u6210`)
+                ? TEXT.success
                 : status.state === "failed"
-                  ? decodeEscapedUnicodeText(String.raw`\u5931\u8d25`)
-                  : decodeEscapedUnicodeText(String.raw`\u5f85\u66f4\u65b0`)}
+                  ? TEXT.failed
+                  : TEXT.pending}
         </span>
         <span className="subtle system-update-text">{statusText}</span>
         {timeText ? (
           <span className="subtle system-update-text">
-            {decodeEscapedUnicodeText(String.raw`\u6700\u8fd1\u65f6\u95f4\uff1a`)}
+            {TEXT.recentTime}
             {timeText}
           </span>
         ) : null}

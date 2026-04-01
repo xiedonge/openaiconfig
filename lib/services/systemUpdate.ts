@@ -81,6 +81,12 @@ export async function startSystemUpdate() {
     throw new Error("\u7f51\u7ad9\u66f4\u65b0\u6309\u94ae\u4ec5\u652f\u6301 Linux \u670d\u52a1\u5668\u90e8\u7f72\u73af\u5883\u3002");
   }
 
+  const existingStatus = await readSystemUpdateStatus();
+
+  if (existingStatus.state === "running") {
+    return existingStatus;
+  }
+
   const serviceName = getUpdateServiceName();
   const startedAt = new Date().toISOString();
 
@@ -89,6 +95,8 @@ export async function startSystemUpdate() {
     message: "\u5df2\u53d1\u8d77\u66f4\u65b0\uff0c\u6b63\u5728\u540e\u53f0\u6267\u884c\u3002\u9875\u9762\u53ef\u80fd\u4f1a\u5728\u7a0d\u540e\u77ed\u6682\u91cd\u542f\u3002",
     startedAt,
     finishedAt: null,
+    fromCommit: null,
+    toCommit: null,
   });
 
   try {
