@@ -1,4 +1,4 @@
-﻿import type { AppType, TriggerType } from "@/types";
+import type { AppType, BackupScope, TriggerType } from "@/types";
 
 export interface LoginInput {
   username: string;
@@ -6,7 +6,6 @@ export interface LoginInput {
 }
 
 export interface ConfigInput {
-  appType: AppType;
   name: string;
   url: string;
   apiKey: string;
@@ -22,6 +21,14 @@ export function parseAppType(value: unknown): AppType {
   }
 
   throw new Error("Invalid app type.");
+}
+
+export function parseBackupScope(value: unknown): BackupScope {
+  if (value === "shared" || value === "codex" || value === "openclaw") {
+    return value;
+  }
+
+  throw new Error("Invalid backup scope.");
 }
 
 export function parseTriggerType(value: unknown): TriggerType {
@@ -52,7 +59,6 @@ export function validateConfigInput(input: unknown): ConfigInput {
     throw new Error("Invalid config payload.");
   }
 
-  const appType = parseAppType(input.appType);
   const name = String(input.name ?? "").trim();
   const url = String(input.url ?? "").trim();
   const apiKey = String(input.apiKey ?? "").trim();
@@ -67,6 +73,7 @@ export function validateConfigInput(input: unknown): ConfigInput {
 
   try {
     const parsedUrl = new URL(url);
+
     if (!parsedUrl.protocol.startsWith("http")) {
       throw new Error("Invalid URL protocol.");
     }
@@ -78,5 +85,5 @@ export function validateConfigInput(input: unknown): ConfigInput {
     throw new Error("API key is required.");
   }
 
-  return { appType, name, url, apiKey };
+  return { name, url, apiKey };
 }

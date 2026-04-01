@@ -1,10 +1,10 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-import { listConfigs, createConfig } from "@/lib/services/configs";
+import { createConfig, listConfigs } from "@/lib/services/configs";
 import { getSession } from "@/lib/session";
-import { parseAppType, validateConfigInput } from "@/lib/validation";
+import { validateConfigInput } from "@/lib/validation";
 
-export async function GET(request: Request) {
+export async function GET() {
   const session = await getSession();
 
   if (!session) {
@@ -12,8 +12,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const appTypeParam = new URL(request.url).searchParams.get("appType");
-    const configs = listConfigs(appTypeParam ? parseAppType(appTypeParam) : undefined);
+    const configs = listConfigs();
     return NextResponse.json({ configs });
   } catch (error) {
     const message = error instanceof Error ? error.message : "加载配置失败。";

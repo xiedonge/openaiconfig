@@ -1,11 +1,47 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 
 import { getDataDirectory } from "@/lib/env";
+import { nowIsoString } from "@/lib/utils";
 
 declare global {
   var __configManagerDb: Database.Database | undefined;
+}
+
+function migrateLegacyConfigsToSharedScope(db: Database.Database) {
+  const legacyCount = Number(
+    (
+      db.prepare(`SELECT COUNT(*) AS count FROM configs WHERE app_type IN ('codex', 'openclaw')`).get() as {
+        count: number;
+      }
+    ).count,
+  );
+
+  if (legacyCount === 0) {
+    return;
+  }
+
+  const migratedAt = nowIsoString();
+  const sharedModeMessage =
+    "\u5df2\u5207\u6362\u4e3a\u5171\u4eab\u914d\u7f6e\u6a21\u5f0f\uff0c\u8bf7\u91cd\u65b0\u542f\u7528\u9700\u8981\u751f\u6548\u7684\u914d\u7f6e\u3002";
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE configs
+       SET is_active = 0,
+           last_apply_status = CASE WHEN is_active = 1 THEN 'failed' ELSE last_apply_status END,
+           last_apply_message = CASE
+             WHEN is_active = 1 THEN ?
+             ELSE last_apply_message
+           END,
+           updated_at = CASE WHEN is_active = 1 THEN ? ELSE updated_at END`,
+    ).run(sharedModeMessage, migratedAt);
+
+    db.prepare(`UPDATE configs SET app_type = 'shared'`).run();
+  });
+
+  tx();
 }
 
 function initializeDatabase(db: Database.Database) {
@@ -63,6 +99,8 @@ function initializeDatabase(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_backup_files_backup_set_id ON backup_files(backup_set_id);
   `);
+
+  migrateLegacyConfigsToSharedScope(db);
 }
 
 export function getDb() {

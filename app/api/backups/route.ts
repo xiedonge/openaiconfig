@@ -1,8 +1,8 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { listBackups } from "@/lib/services/backups";
 import { getSession } from "@/lib/session";
-import { parseAppType, parseTriggerType } from "@/lib/validation";
+import { parseBackupScope, parseTriggerType } from "@/lib/validation";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -13,10 +13,10 @@ export async function GET(request: Request) {
 
   try {
     const searchParams = new URL(request.url).searchParams;
-    const appType = searchParams.get("appType");
+    const scope = searchParams.get("appType");
     const triggerType = searchParams.get("triggerType");
     const backups = listBackups({
-      appType: appType ? parseAppType(appType) : undefined,
+      scope: scope ? parseBackupScope(scope) : undefined,
       triggerType: triggerType ? parseTriggerType(triggerType) : undefined,
     });
 

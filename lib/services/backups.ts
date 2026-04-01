@@ -1,14 +1,15 @@
-﻿import fs from "node:fs/promises";
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import { getAppAdapter } from "@/lib/adapters";
+import { getDataDirectory } from "@/lib/env";
 import { getDb } from "@/lib/db";
-import { getBackupFileName, nowIsoString, normalizeSqliteTimestamp, sqliteBoolean } from "@/lib/utils";
-import type { ApplyStatus, AppType, BackupFileRecord, BackupSetRecord, TriggerType } from "@/types";
+import { getBackupFileName, nowIsoString, normalizeSqliteTimestamp } from "@/lib/utils";
+import type { ApplyStatus, BackupFileRecord, BackupScope, BackupSetRecord, TriggerType } from "@/types";
 
 interface BackupSetRow {
   id: number;
-  app_type: AppType;
+  app_type: BackupScope;
   trigger_type: TriggerType;
   related_config_id: number | null;
   created_at: string;
@@ -29,6 +30,14 @@ interface BackupFileRow {
   created_at: string;
 }
 
+function getBackupRootForScope(scope: BackupScope) {
+  if (scope === "shared") {
+    return path.join(getDataDirectory(), "shared-backups");
+  }
+
+  return getAppAdapter(scope).getBackupRoot();
+}
+
 function mapBackupFileRow(row: BackupFileRow): BackupFileRecord {
   return {
     id: row.id,
@@ -43,7 +52,7 @@ function mapBackupFileRow(row: BackupFileRow): BackupFileRecord {
 function mapBackupSetRow(row: BackupSetRow, files: BackupFileRecord[]): BackupSetRecord {
   return {
     id: row.id,
-    appType: row.app_type,
+    scope: row.app_type,
     triggerType: row.trigger_type,
     relatedConfigId: row.related_config_id,
     createdAt: row.created_at,
@@ -68,7 +77,7 @@ export async function writeFileAtomic(filePath: string, content: string | Buffer
 }
 
 export async function createBackupSet(args: {
-  appType: AppType;
+  scope: BackupScope;
   triggerType: TriggerType;
   relatedConfigId: number | null;
   sourcePaths: string[];
@@ -80,10 +89,10 @@ export async function createBackupSet(args: {
       `INSERT INTO backup_sets (app_type, trigger_type, related_config_id, created_at, last_restore_status, post_action_status)
        VALUES (?, ?, ?, ?, 'never', 'never')`,
     )
-    .run(args.appType, args.triggerType, args.relatedConfigId, createdAt);
+    .run(args.scope, args.triggerType, args.relatedConfigId, createdAt);
 
   const backupSetId = Number(result.lastInsertRowid);
-  const backupRoot = getAppAdapter(args.appType).getBackupRoot();
+  const backupRoot = getBackupRootForScope(args.scope);
   const backupDirectory = path.join(backupRoot, String(backupSetId));
 
   await fs.mkdir(backupDirectory, { recursive: true });
@@ -103,14 +112,14 @@ export async function createBackupSet(args: {
   return getBackupSetByIdOrThrow(backupSetId);
 }
 
-export function listBackups(filters: { appType?: AppType; triggerType?: TriggerType } = {}) {
+export function listBackups(filters: { scope?: BackupScope; triggerType?: TriggerType } = {}) {
   const db = getDb();
   const conditions: string[] = [];
   const params: unknown[] = [];
 
-  if (filters.appType) {
+  if (filters.scope) {
     conditions.push(`backup_sets.app_type = ?`);
-    params.push(filters.appType);
+    params.push(filters.scope);
   }
 
   if (filters.triggerType) {

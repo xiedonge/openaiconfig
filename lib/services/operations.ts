@@ -1,12 +1,13 @@
-﻿import fs from "node:fs/promises";
+import fs from "node:fs/promises";
 
-import type { FileMutation } from "@/lib/adapters";
-import { getAppAdapter } from "@/lib/adapters";
+import type { AppAdapter } from "@/lib/adapters";
+import { getAllAppAdapters, getAppAdaptersForScope } from "@/lib/adapters";
 import { getDb } from "@/lib/db";
+import type { FileMutation } from "@/lib/adapters";
 import { createBackupSet, getBackupSetByIdOrThrow, restoreFilesFromBackupSet, updateBackupPostAction, updateBackupRestoreResult, writeFileAtomic } from "@/lib/services/backups";
-import { getConfigByIdOrThrow, markConfigApplyResult, switchActiveConfig } from "@/lib/services/configs";
+import { clearActiveConfig, getConfigByIdOrThrow, markConfigApplyResult, switchActiveConfig } from "@/lib/services/configs";
 import { toErrorMessage } from "@/lib/utils";
-import type { AppType } from "@/types";
+import type { BackupScope } from "@/types";
 
 async function buildUpdatedFiles(mutations: FileMutation[]) {
   const updates: Array<{ sourcePath: string; content: string }> = [];
@@ -20,8 +21,22 @@ async function buildUpdatedFiles(mutations: FileMutation[]) {
   return updates;
 }
 
-async function attemptRollback(appType: AppType, backupSetId: number) {
-  const adapter = getAppAdapter(appType);
+async function runPostActions(adapters: AppAdapter[], stage: "apply" | "restore" | "rollback") {
+  const messages: string[] = [];
+
+  for (const adapter of adapters) {
+    const message = await adapter.runPostAction(stage);
+
+    if (message) {
+      messages.push(message);
+    }
+  }
+
+  return messages.join(" ");
+}
+
+async function attemptRollback(scope: BackupScope, backupSetId: number) {
+  const adapters = getAppAdaptersForScope(scope);
   const backupSet = getBackupSetByIdOrThrow(backupSetId);
 
   try {
@@ -31,7 +46,7 @@ async function attemptRollback(appType: AppType, backupSetId: number) {
   }
 
   try {
-    const rollbackMessage = await adapter.runPostAction("rollback");
+    const rollbackMessage = await runPostActions(adapters, "rollback");
     return rollbackMessage ? `Rollback completed. ${rollbackMessage}` : "Rollback completed.";
   } catch (error) {
     return `Rollback restored files, but the post action failed: ${toErrorMessage(error)}`;
@@ -40,13 +55,13 @@ async function attemptRollback(appType: AppType, backupSetId: number) {
 
 export async function activateConfig(configId: number) {
   const config = getConfigByIdOrThrow(configId);
-  const adapter = getAppAdapter(config.appType);
-  const mutations = adapter.getMutations(config);
+  const adapters = getAllAppAdapters();
+  const mutations = adapters.flatMap((adapter) => adapter.getMutations(config));
   let backupSetId: number | null = null;
 
   try {
     const backupSet = await createBackupSet({
-      appType: config.appType,
+      scope: "shared",
       triggerType: "activate",
       relatedConfigId: config.id,
       sourcePaths: mutations.map((mutation) => mutation.sourcePath),
@@ -59,11 +74,13 @@ export async function activateConfig(configId: number) {
       await writeFileAtomic(update.sourcePath, update.content);
     }
 
-    const postActionMessage = await adapter.runPostAction("apply");
+    const postActionMessage = await runPostActions(adapters, "apply");
     const appliedAt = new Date().toISOString();
-    const successMessage = postActionMessage ?? "Configuration activated successfully.";
+    const successMessage =
+      postActionMessage ||
+      "\u5171\u4eab\u914d\u7f6e\u5df2\u542f\u7528\uff0ccodex \u4e0e openclaw \u5df2\u540c\u6b65\u66f4\u65b0\u3002";
 
-    switchActiveConfig(config.appType, config.id, appliedAt, successMessage);
+    switchActiveConfig(config.id, appliedAt, successMessage);
     updateBackupPostAction(backupSet.id, "success", successMessage);
 
     return {
@@ -74,7 +91,7 @@ export async function activateConfig(configId: number) {
     let message = toErrorMessage(error);
 
     if (backupSetId) {
-      const rollbackMessage = await attemptRollback(config.appType, backupSetId);
+      const rollbackMessage = await attemptRollback("shared", backupSetId);
       message = `${message} ${rollbackMessage}`.trim();
       updateBackupPostAction(backupSetId, "failed", message);
     }
@@ -86,12 +103,12 @@ export async function activateConfig(configId: number) {
 
 export async function restoreBackupSet(backupSetId: number) {
   const backupSet = getBackupSetByIdOrThrow(backupSetId);
-  const adapter = getAppAdapter(backupSet.appType);
+  const adapters = getAppAdaptersForScope(backupSet.scope);
   let safeguardBackupId: number | null = null;
 
   try {
     const safeguardBackup = await createBackupSet({
-      appType: backupSet.appType,
+      scope: backupSet.scope,
       triggerType: "restore",
       relatedConfigId: backupSet.relatedConfigId,
       sourcePaths: backupSet.files.map((file) => file.sourcePath),
@@ -100,22 +117,32 @@ export async function restoreBackupSet(backupSetId: number) {
 
     await restoreFilesFromBackupSet(backupSet);
 
-    const postActionMessage = await adapter.runPostAction("restore");
+    const postActionMessage = await runPostActions(adapters, "restore");
     const restoredAt = new Date().toISOString();
-    const successMessage = postActionMessage ?? `Backup #${backupSet.id} restored successfully.`;
+    const successMessage =
+      postActionMessage || `\u5907\u4efd #${backupSet.id} \u5df2\u8fd8\u539f\u6210\u529f\u3002`;
 
     updateBackupRestoreResult(backupSet.id, "success", successMessage);
     updateBackupPostAction(backupSet.id, "success", successMessage);
 
     const db = getDb();
-    db.prepare(`UPDATE configs SET is_active = 0 WHERE app_type = ?`).run(backupSet.appType);
+    let restoredConfigActivated = false;
 
     if (backupSet.relatedConfigId) {
       const existing = db.prepare(`SELECT id FROM configs WHERE id = ?`).get(backupSet.relatedConfigId) as { id: number } | undefined;
 
       if (existing) {
-        switchActiveConfig(backupSet.appType, backupSet.relatedConfigId, restoredAt, `Restored from backup #${backupSet.id}.`);
+        switchActiveConfig(
+          backupSet.relatedConfigId,
+          restoredAt,
+          `\u5df2\u4ece\u5907\u4efd #${backupSet.id} \u8fd8\u539f\u3002`,
+        );
+        restoredConfigActivated = true;
       }
+    }
+
+    if (!restoredConfigActivated) {
+      clearActiveConfig();
     }
 
     return {
@@ -126,7 +153,7 @@ export async function restoreBackupSet(backupSetId: number) {
     let message = toErrorMessage(error);
 
     if (safeguardBackupId) {
-      const rollbackMessage = await attemptRollback(backupSet.appType, safeguardBackupId);
+      const rollbackMessage = await attemptRollback(backupSet.scope, safeguardBackupId);
       message = `${message} ${rollbackMessage}`.trim();
     }
 

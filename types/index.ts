@@ -1,4 +1,5 @@
 export type AppType = "codex" | "openclaw";
+export type BackupScope = AppType | "shared";
 
 export type ApplyStatus = "never" | "success" | "failed";
 
@@ -8,7 +9,6 @@ export type SystemUpdateState = "idle" | "running" | "success" | "failed";
 
 export interface ConfigRecord {
   id: number;
-  appType: AppType;
   name: string;
   url: string;
   apiKey: string;
@@ -31,7 +31,7 @@ export interface BackupFileRecord {
 
 export interface BackupSetRecord {
   id: number;
-  appType: AppType;
+  scope: BackupScope;
   triggerType: TriggerType;
   relatedConfigId: number | null;
   createdAt: string;

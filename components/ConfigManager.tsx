@@ -1,16 +1,15 @@
-﻿"use client";
+"use client";
 
 import { ClipboardEvent, FormEvent, useState } from "react";
 
 import { maskSecret } from "@/lib/utils";
-import type { AppType, ApplyStatus, ConfigRecord } from "@/types";
+import type { ApplyStatus, ConfigRecord } from "@/types";
 
 interface ConfigManagerProps {
   initialConfigs: ConfigRecord[];
 }
 
 interface ConfigFormState {
-  appType: AppType;
   name: string;
   url: string;
   apiKey: string;
@@ -22,9 +21,8 @@ interface ParsedQuickPaste {
   apiKey: string;
 }
 
-function createEmptyForm(appType: AppType = "codex"): ConfigFormState {
+function createEmptyForm(): ConfigFormState {
   return {
-    appType,
     name: "",
     url: "",
     apiKey: "",
@@ -77,6 +75,7 @@ function parseQuickPaste(rawText: string): ParsedQuickPaste {
   for (const line of lines) {
     if (!name) {
       const labeledName = tryExtractByLabel(line, ["name", "名称", "标题"]);
+
       if (labeledName) {
         name = labeledName;
         continue;
@@ -85,6 +84,7 @@ function parseQuickPaste(rawText: string): ParsedQuickPaste {
 
     if (!url) {
       const labeledUrl = tryExtractByLabel(line, ["url", "base_url", "base-url", "endpoint"]);
+
       if (labeledUrl) {
         url = labeledUrl;
         continue;
@@ -93,6 +93,7 @@ function parseQuickPaste(rawText: string): ParsedQuickPaste {
 
     if (!apiKey) {
       const labeledApiKey = tryExtractByLabel(line, ["api[_ -]?key", "apikey", "key", "openai_api_key"]);
+
       if (labeledApiKey) {
         apiKey = labeledApiKey;
         continue;
@@ -125,8 +126,7 @@ function parseQuickPaste(rawText: string): ParsedQuickPaste {
 
 export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
   const [configs, setConfigs] = useState(initialConfigs);
-  const [currentAppType, setCurrentAppType] = useState<AppType>("codex");
-  const [form, setForm] = useState<ConfigFormState>(createEmptyForm("codex"));
+  const [form, setForm] = useState<ConfigFormState>(createEmptyForm());
   const [quickPasteText, setQuickPasteText] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [revealedIds, setRevealedIds] = useState<Record<number, boolean>>({});
@@ -134,13 +134,11 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const filteredConfigs = configs.filter((config) => config.appType === currentAppType);
-
-  async function loadConfigs(appType: AppType) {
+  async function loadConfigs() {
     setLoading(true);
 
     try {
-      const response = await fetch(`/api/configs?appType=${appType}`, {
+      const response = await fetch("/api/configs", {
         cache: "no-store",
       });
       const payload = await readJson<{ configs?: ConfigRecord[]; error?: string }>(response);
@@ -149,15 +147,8 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
         throw new Error(payload.error ?? "加载配置列表失败。");
       }
 
-      setConfigs((previous) => {
-        const remaining = previous.filter((config) => config.appType !== appType);
-        return [...remaining, ...(payload.configs ?? [])].sort((left, right) => {
-          if (left.appType === right.appType) {
-            return right.updatedAt.localeCompare(left.updatedAt);
-          }
-          return left.appType.localeCompare(right.appType);
-        });
-      });
+      setConfigs(payload.configs ?? []);
+      setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "加载配置列表失败。");
     } finally {
@@ -165,9 +156,9 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
     }
   }
 
-  function resetForm(appType: AppType = currentAppType) {
+  function resetForm() {
     setEditingId(null);
-    setForm(createEmptyForm(appType));
+    setForm(createEmptyForm());
     setQuickPasteText("");
   }
 
@@ -196,8 +187,8 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
         throw new Error(payload.error ?? "保存配置失败。");
       }
 
-      await loadConfigs(form.appType);
-      resetForm(form.appType);
+      await loadConfigs();
+      resetForm();
       updateNotice(editingId ? "配置已更新。" : "配置已新增。", null);
     } catch (submitError) {
       updateNotice(null, submitError instanceof Error ? submitError.message : "保存配置失败。");
@@ -207,10 +198,8 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
   }
 
   function handleEdit(config: ConfigRecord) {
-    setCurrentAppType(config.appType);
     setEditingId(config.id);
     setForm({
-      appType: config.appType,
       name: config.name,
       url: config.url,
       apiKey: config.apiKey,
@@ -234,10 +223,10 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
       }
 
       if (editingId === config.id) {
-        resetForm(config.appType);
+        resetForm();
       }
 
-      await loadConfigs(config.appType);
+      await loadConfigs();
       updateNotice("配置已删除。", null);
     } catch (deleteError) {
       updateNotice(null, deleteError instanceof Error ? deleteError.message : "删除配置失败。");
@@ -260,8 +249,8 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
         throw new Error(payload.error ?? "启用配置失败。");
       }
 
-      await loadConfigs(config.appType);
-      updateNotice(`已启用 ${config.name}。`, null);
+      await loadConfigs();
+      updateNotice(`已启用 ${config.name}，并同步写入 codex 与 openclaw。`, null);
     } catch (activateError) {
       updateNotice(null, activateError instanceof Error ? activateError.message : "启用配置失败。");
     } finally {
@@ -276,24 +265,13 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
     }));
   }
 
-  function handleAppTypeChange(nextAppType: AppType) {
-    setCurrentAppType(nextAppType);
-    setForm((current) => ({
-      ...current,
-      appType: nextAppType,
-    }));
-    updateNotice(null, null);
-    void loadConfigs(nextAppType);
-  }
-
   function fillFormFromQuickPaste(rawText: string) {
     const parsed = parseQuickPaste(rawText);
-    setForm((current) => ({
-      ...current,
+    setForm({
       name: parsed.name,
       url: parsed.url,
       apiKey: parsed.apiKey,
-    }));
+    });
     updateNotice("已自动识别并填充名称、URL、API Key。", null);
   }
 
@@ -321,22 +299,14 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
     <div className="panel-grid">
       <section className="card stack">
         <div className="page-actions">
-          <div className="field" style={{ minWidth: 220 }}>
-            <label htmlFor="config-app-filter">应用类型</label>
-            <select
-              id="config-app-filter"
-              className="select"
-              onChange={(event) => handleAppTypeChange(event.target.value as AppType)}
-              value={currentAppType}
-            >
-              <option value="codex">codex</option>
-              <option value="openclaw">openclaw</option>
-            </select>
+          <div className="stack" style={{ gap: 6 }}>
+            <strong>共享配置列表</strong>
+            <span className="subtle">启用后会同时更新 codex 与 openclaw，只是底层文件映射和后置动作不同。</span>
           </div>
-          <button className="button button-secondary" onClick={() => resetForm(currentAppType)} type="button">
+          <button className="button button-secondary" onClick={resetForm} type="button">
             新增配置
           </button>
-          <span className="subtle">{loading ? "处理中..." : `共 ${filteredConfigs.length} 条记录`}</span>
+          <span className="subtle">{loading ? "处理中..." : `共 ${configs.length} 条记录`}</span>
         </div>
 
         {message ? <div className="notice notice-success">{message}</div> : null}
@@ -355,14 +325,14 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
               </tr>
             </thead>
             <tbody>
-              {filteredConfigs.length === 0 ? (
+              {configs.length === 0 ? (
                 <tr>
                   <td colSpan={6}>
-                    <div className="empty-state">当前应用还没有配置记录。</div>
+                    <div className="empty-state">当前还没有配置记录。</div>
                   </td>
                 </tr>
               ) : (
-                filteredConfigs.map((config) => (
+                configs.map((config) => (
                   <tr key={config.id}>
                     <td className="config-col-name">
                       <strong>{config.name}</strong>
@@ -412,7 +382,7 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
 
       <aside className="card stack">
         <div>
-          <p className="subtle">{editingId ? `正在编辑 #${editingId}` : "新增一条配置记录"}</p>
+          <p className="subtle">{editingId ? `正在编辑 #${editingId}` : "新增一条共享配置记录"}</p>
           <h2>{editingId ? "编辑配置" : "新增配置"}</h2>
         </div>
         <form className="form-grid" onSubmit={handleSubmit}>
@@ -433,18 +403,6 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
               </button>
               <span className="subtle">支持三行格式，也支持 `名称: ...`、`URL: ...`、`API Key: ...` 这种格式。</span>
             </div>
-          </div>
-          <div className="field">
-            <label htmlFor="form-appType">应用类型</label>
-            <select
-              id="form-appType"
-              className="select"
-              onChange={(event) => setForm((current) => ({ ...current, appType: event.target.value as AppType }))}
-              value={form.appType}
-            >
-              <option value="codex">codex</option>
-              <option value="openclaw">openclaw</option>
-            </select>
           </div>
           <div className="field">
             <label htmlFor="form-name">名称</label>
@@ -477,7 +435,7 @@ export default function ConfigManager({ initialConfigs }: ConfigManagerProps) {
             <button className="button button-primary" disabled={loading} type="submit">
               {loading ? "保存中..." : editingId ? "保存修改" : "新增配置"}
             </button>
-            <button className="button button-ghost" onClick={() => resetForm(currentAppType)} type="button">
+            <button className="button button-ghost" onClick={resetForm} type="button">
               清空
             </button>
           </div>

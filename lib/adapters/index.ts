@@ -3,7 +3,7 @@
 import * as TOML from "@iarna/toml";
 
 import { getCodexPaths, getOpenClawPaths, getOpenClawProviderKey, getOpenClawRestartCommand } from "@/lib/env";
-import type { AppType, ConfigRecord } from "@/types";
+import type { AppType, BackupScope, ConfigRecord } from "@/types";
 
 export type PostActionStage = "apply" | "restore" | "rollback";
 
@@ -216,6 +216,20 @@ const openClawAdapter: AppAdapter = {
   },
 };
 
+const managedAdapters = [codexAdapter, openClawAdapter] as const;
+
 export function getAppAdapter(appType: AppType) {
   return appType === "codex" ? codexAdapter : openClawAdapter;
+}
+
+export function getAppAdaptersForScope(scope: BackupScope) {
+  if (scope === "shared") {
+    return [...managedAdapters];
+  }
+
+  return [getAppAdapter(scope)];
+}
+
+export function getAllAppAdapters() {
+  return [...managedAdapters];
 }

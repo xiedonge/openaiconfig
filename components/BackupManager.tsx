@@ -1,14 +1,14 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 
-import type { AppType, BackupSetRecord, TriggerType } from "@/types";
+import type { BackupScope, BackupSetRecord, TriggerType } from "@/types";
 
 interface BackupManagerProps {
   initialBackups: BackupSetRecord[];
 }
 
-type AppFilter = AppType | "all";
+type ScopeFilter = BackupScope | "all";
 type TriggerFilter = TriggerType | "all";
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -27,9 +27,17 @@ function getStatusClass(status: BackupSetRecord["lastRestoreStatus"]) {
   return "status-pill status-neutral";
 }
 
+function formatScope(scope: BackupScope) {
+  if (scope === "shared") {
+    return "shared";
+  }
+
+  return scope;
+}
+
 export default function BackupManager({ initialBackups }: BackupManagerProps) {
   const [backups, setBackups] = useState(initialBackups);
-  const [appFilter, setAppFilter] = useState<AppFilter>("all");
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
   const [triggerFilter, setTriggerFilter] = useState<TriggerFilter>("all");
   const [selectedBackupId, setSelectedBackupId] = useState<number | null>(initialBackups[0]?.id ?? null);
   const [loading, setLoading] = useState(false);
@@ -39,14 +47,16 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
   const selectedBackup = backups.find((backup) => backup.id === selectedBackupId) ?? null;
   const backupCountText = `共 ${backups.length} 条备份记录`;
 
-  async function loadBackups(nextAppFilter: AppFilter = appFilter, nextTriggerFilter: TriggerFilter = triggerFilter) {
+  async function loadBackups(nextScopeFilter: ScopeFilter = scopeFilter, nextTriggerFilter: TriggerFilter = triggerFilter) {
     setLoading(true);
 
     try {
       const query = new URLSearchParams();
-      if (nextAppFilter !== "all") {
-        query.set("appType", nextAppFilter);
+
+      if (nextScopeFilter !== "all") {
+        query.set("appType", nextScopeFilter);
       }
+
       if (nextTriggerFilter !== "all") {
         query.set("triggerType", nextTriggerFilter);
       }
@@ -93,7 +103,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
       }
 
       setMessage(`备份 #${backup.id} 已还原。`);
-      await loadBackups(appFilter, triggerFilter);
+      await loadBackups(scopeFilter, triggerFilter);
       setSelectedBackupId(backup.id);
     } catch (restoreError) {
       setError(restoreError instanceof Error ? restoreError.message : "还原备份失败。");
@@ -107,18 +117,19 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
       <section className="card stack">
         <div className="page-actions">
           <div className="field" style={{ minWidth: 220 }}>
-            <label htmlFor="backup-app-filter">应用类型</label>
+            <label htmlFor="backup-scope-filter">范围</label>
             <select
-              id="backup-app-filter"
+              id="backup-scope-filter"
               className="select"
               onChange={(event) => {
-                const nextValue = event.target.value as AppFilter;
-                setAppFilter(nextValue);
+                const nextValue = event.target.value as ScopeFilter;
+                setScopeFilter(nextValue);
                 void loadBackups(nextValue, triggerFilter);
               }}
-              value={appFilter}
+              value={scopeFilter}
             >
               <option value="all">全部</option>
+              <option value="shared">shared</option>
               <option value="codex">codex</option>
               <option value="openclaw">openclaw</option>
             </select>
@@ -131,7 +142,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
               onChange={(event) => {
                 const nextValue = event.target.value as TriggerFilter;
                 setTriggerFilter(nextValue);
-                void loadBackups(appFilter, nextValue);
+                void loadBackups(scopeFilter, nextValue);
               }}
               value={triggerFilter}
             >
@@ -151,7 +162,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
             <thead>
               <tr>
                 <th>备份编号</th>
-                <th>应用</th>
+                <th>范围</th>
                 <th>触发来源</th>
                 <th>关联配置</th>
                 <th>创建时间</th>
@@ -173,7 +184,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
                       <strong>#{backup.id}</strong>
                       <div className="subtle">包含 {backup.files.length} 个文件</div>
                     </td>
-                    <td>{backup.appType}</td>
+                    <td>{formatScope(backup.scope)}</td>
                     <td>{backup.triggerType === "activate" ? "启用前备份" : "还原前备份"}</td>
                     <td>{backup.relatedConfigName ?? "关联配置已删除或未关联"}</td>
                     <td>{backup.createdAt}</td>
@@ -206,7 +217,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
               <p className="subtle">备份详情</p>
               <h2>备份 #{selectedBackup.id}</h2>
               <div className="inline-meta">
-                <span className="status-pill status-neutral">{selectedBackup.appType}</span>
+                <span className="status-pill status-neutral">{formatScope(selectedBackup.scope)}</span>
                 <span className={getStatusClass(selectedBackup.postActionStatus)}>
                   后置动作：{selectedBackup.postActionStatus}
                 </span>
@@ -215,6 +226,7 @@ export default function BackupManager({ initialBackups }: BackupManagerProps) {
 
             <div className="notice">
               <div>触发来源：{selectedBackup.triggerType === "activate" ? "启用前备份" : "还原前备份"}</div>
+              <div>范围：{formatScope(selectedBackup.scope)}</div>
               <div>关联配置：{selectedBackup.relatedConfigName ?? "已删除或未关联"}</div>
               <div>创建时间：{selectedBackup.createdAt}</div>
               <div>后置动作结果：{selectedBackup.postActionMessage ?? "尚未执行"}</div>

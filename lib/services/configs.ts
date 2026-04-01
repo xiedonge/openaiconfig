@@ -1,13 +1,12 @@
-﻿import type Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 
 import { getDb } from "@/lib/db";
 import { normalizeSqliteTimestamp, nowIsoString, sqliteBoolean } from "@/lib/utils";
 import type { ConfigInput } from "@/lib/validation";
-import type { ApplyStatus, AppType, ConfigRecord } from "@/types";
+import type { ApplyStatus, ConfigRecord } from "@/types";
 
 interface ConfigRow {
   id: number;
-  app_type: AppType;
   name: string;
   url: string;
   api_key: string;
@@ -22,7 +21,6 @@ interface ConfigRow {
 function mapConfigRow(row: ConfigRow): ConfigRecord {
   return {
     id: row.id,
-    appType: row.app_type,
     name: row.name,
     url: row.url,
     apiKey: row.api_key,
@@ -40,12 +38,9 @@ function configRowOrNull(statement: Database.Statement, ...params: unknown[]) {
   return row ? mapConfigRow(row) : null;
 }
 
-export function listConfigs(appType?: AppType) {
+export function listConfigs() {
   const db = getDb();
-  const sql = appType
-    ? `SELECT * FROM configs WHERE app_type = ? ORDER BY is_active DESC, updated_at DESC, id DESC`
-    : `SELECT * FROM configs ORDER BY app_type ASC, is_active DESC, updated_at DESC, id DESC`;
-  const rows = db.prepare(sql).all(...(appType ? [appType] : [])) as ConfigRow[];
+  const rows = db.prepare(`SELECT * FROM configs ORDER BY is_active DESC, updated_at DESC, id DESC`).all() as ConfigRow[];
   return rows.map(mapConfigRow);
 }
 
@@ -70,9 +65,9 @@ export function createConfig(input: ConfigInput) {
   const result = db
     .prepare(
       `INSERT INTO configs (app_type, name, url, api_key, is_active, created_at, updated_at, last_apply_status)
-       VALUES (?, ?, ?, ?, 0, ?, ?, 'never')`,
+       VALUES ('shared', ?, ?, ?, 0, ?, ?, 'never')`,
     )
-    .run(input.appType, input.name, input.url, input.apiKey, timestamp, timestamp);
+    .run(input.name, input.url, input.apiKey, timestamp, timestamp);
 
   return getConfigByIdOrThrow(Number(result.lastInsertRowid));
 }
@@ -81,22 +76,24 @@ export function updateConfig(id: number, input: ConfigInput) {
   const existing = getConfigByIdOrThrow(id);
   const db = getDb();
   const timestamp = nowIsoString();
+  const reapplyMessage =
+    "\u5f53\u524d\u8bb0\u5f55\u5df2\u88ab\u4fee\u6539\uff0c\u8bf7\u91cd\u65b0\u542f\u7528\u4ee5\u540c\u65f6\u5199\u56de codex \u548c openclaw\u3002";
 
   if (existing.isActive) {
     db.prepare(
       `UPDATE configs
-       SET app_type = ?, name = ?, url = ?, api_key = ?, is_active = 0,
+       SET app_type = 'shared', name = ?, url = ?, api_key = ?, is_active = 0,
            last_apply_status = 'failed',
-           last_apply_message = '当前记录已被修改，请重新启用以写回最新配置。',
+           last_apply_message = ?,
            updated_at = ?
        WHERE id = ?`,
-    ).run(input.appType, input.name, input.url, input.apiKey, timestamp, existing.id);
+    ).run(input.name, input.url, input.apiKey, reapplyMessage, timestamp, existing.id);
   } else {
     db.prepare(
       `UPDATE configs
-       SET app_type = ?, name = ?, url = ?, api_key = ?, updated_at = ?
+       SET app_type = 'shared', name = ?, url = ?, api_key = ?, updated_at = ?
        WHERE id = ?`,
-    ).run(input.appType, input.name, input.url, input.apiKey, timestamp, existing.id);
+    ).run(input.name, input.url, input.apiKey, timestamp, existing.id);
   }
 
   return getConfigByIdOrThrow(id);
@@ -119,10 +116,15 @@ export function markConfigApplyResult(id: number, status: ApplyStatus, message: 
   ).run(appliedAt, status, message, timestamp, id);
 }
 
-export function switchActiveConfig(appType: AppType, configId: number | null, appliedAt: string, message: string) {
+export function clearActiveConfig() {
+  const db = getDb();
+  db.prepare(`UPDATE configs SET is_active = 0`).run();
+}
+
+export function switchActiveConfig(configId: number | null, appliedAt: string, message: string) {
   const db = getDb();
   const tx = db.transaction(() => {
-    db.prepare(`UPDATE configs SET is_active = 0 WHERE app_type = ?`).run(appType);
+    db.prepare(`UPDATE configs SET is_active = 0`).run();
 
     if (configId) {
       db.prepare(
