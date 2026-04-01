@@ -1,7 +1,8 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
 import ConfigManager from "@/components/ConfigManager";
 import LogoutButton from "@/components/LogoutButton";
+import SystemUpdateButton from "@/components/SystemUpdateButton";
 import { listConfigs } from "@/lib/services/configs";
 import { requireSession } from "@/lib/session";
 
@@ -13,19 +14,20 @@ export default async function ConfigsPage() {
     <main className="page-shell stack">
       <header className="page-header">
         <div>
-          <p className="subtle">当前管理员：{session.username}</p>
-          <h1 className="page-title">配置列表</h1>
-          <p className="page-subtitle">支持新增、编辑、删除、启用配置，并将启用配置写回真实配置文件。</p>
+          <p className="subtle">??????{session.username}</p>
+          <h1 className="page-title">????</h1>
+          <p className="page-subtitle">???????????????????????????????</p>
         </div>
         <div className="page-actions">
           <nav className="nav-links">
             <Link className="nav-link nav-link-active" href="/configs">
-              配置管理
+              ????
             </Link>
             <Link className="nav-link" href="/backups">
-              备份与还原
+              ?????
             </Link>
           </nav>
+          <SystemUpdateButton />
           <LogoutButton />
         </div>
       </header>

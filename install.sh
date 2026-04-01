@@ -3,6 +3,7 @@ set -euo pipefail
 
 APP_NAME="${APP_NAME:-config-manager-web}"
 SERVICE_NAME="${SERVICE_NAME:-$APP_NAME}"
+UPDATE_SERVICE_NAME="${UPDATE_SERVICE_NAME:-$APP_NAME-update}"
 REPO_URL="${REPO_URL:-https://github.com/xiedonge/openaiconfig.git}"
 REPO_REF="${REPO_REF:-main}"
 APP_USER="${CONFIG_MANAGER_USER:-${SUDO_USER:-$(id -un)}}"
@@ -17,6 +18,9 @@ OPENCLAW_PROVIDER_KEY="${OPENCLAW_PROVIDER_KEY:-custom-goood-my}"
 OPENCLAW_RESTART_COMMAND="${OPENCLAW_RESTART_COMMAND:-openclaw gateway restart}"
 OPENCLAW_RESTART_TIMEOUT_MS="${OPENCLAW_RESTART_TIMEOUT_MS:-30000}"
 SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE:-false}"
+DATA_DIR="${DATA_DIR:-$INSTALL_DIR/data}"
+UPDATE_STATUS_FILE="${UPDATE_STATUS_FILE:-$DATA_DIR/system-update.json}"
+UPDATE_LOCK_FILE="${UPDATE_LOCK_FILE:-$DATA_DIR/system-update.lock}"
 
 log() {
   printf '\033[1;34m[%s]\033[0m %s\n' "$APP_NAME" "$1"
@@ -65,7 +69,7 @@ random_string() {
 ensure_packages() {
   log "Installing required system packages"
   apt-get update
-  apt-get install -y curl ca-certificates git build-essential
+  apt-get install -y curl ca-certificates git build-essential sudo
 }
 
 ensure_node() {
@@ -88,6 +92,7 @@ ensure_node() {
 clone_or_update_repo() {
   if [[ -d "$INSTALL_DIR/.git" ]]; then
     log "Updating existing repository in $INSTALL_DIR"
+    git -C "$INSTALL_DIR" remote set-url origin "$REPO_URL"
     git -C "$INSTALL_DIR" fetch --tags origin
     git -C "$INSTALL_DIR" checkout "$REPO_REF"
     if git -C "$INSTALL_DIR" rev-parse --verify "origin/$REPO_REF" >/dev/null 2>&1; then
@@ -120,11 +125,10 @@ write_env_file() {
   local session_secret="${SESSION_SECRET:-}"
   local codex_dir="${CODEX_CONFIG_DIR:-$app_home/.codex}"
   local openclaw_dir="${OPENCLAW_CONFIG_DIR:-$app_home/.openclaw}"
-  local data_dir="${DATA_DIR:-$INSTALL_DIR/data}"
 
   log "Writing environment file to $ENV_FILE"
-  mkdir -p "$ENV_DIR" "$data_dir"
-  chown -R "$APP_USER:$APP_GROUP" "$data_dir"
+  mkdir -p "$ENV_DIR" "$DATA_DIR"
+  chown -R "$APP_USER:$APP_GROUP" "$DATA_DIR"
 
   if [[ -z "$admin_password_hash" ]]; then
     if [[ -n "${ADMIN_PASSWORD:-}" ]]; then
@@ -152,7 +156,9 @@ OPENCLAW_PROVIDER_KEY=$OPENCLAW_PROVIDER_KEY
 OPENCLAW_RESTART_COMMAND=$OPENCLAW_RESTART_COMMAND
 OPENCLAW_RESTART_TIMEOUT_MS=$OPENCLAW_RESTART_TIMEOUT_MS
 SESSION_COOKIE_SECURE=$SESSION_COOKIE_SECURE
-DATA_DIR=$data_dir
+DATA_DIR=$DATA_DIR
+UPDATE_SERVICE_NAME=$UPDATE_SERVICE_NAME.service
+UPDATE_STATUS_FILE=$UPDATE_STATUS_FILE
 EOF
 
   chmod 600 "$ENV_FILE"
@@ -201,10 +207,76 @@ WantedBy=multi-user.target
 EOF
 }
 
-enable_service() {
+write_update_service_file() {
+  local bash_bin
+  bash_bin="$(command -v bash)"
+  [[ -n "$bash_bin" ]] || fail "bash was not found after installation."
+
+  log "Writing systemd unit to /etc/systemd/system/$UPDATE_SERVICE_NAME.service"
+  cat >/etc/systemd/system/"$UPDATE_SERVICE_NAME".service <<EOF
+[Unit]
+Description=Config Manager Web Manual Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=$INSTALL_DIR
+Environment=APP_NAME=$APP_NAME
+Environment=SERVICE_NAME=$SERVICE_NAME
+Environment=INSTALL_DIR=$INSTALL_DIR
+Environment=APP_USER=$APP_USER
+Environment=APP_GROUP=$APP_GROUP
+Environment=REPO_URL=$REPO_URL
+Environment=REPO_REF=$REPO_REF
+Environment=DATA_DIR=$DATA_DIR
+Environment=UPDATE_STATUS_FILE=$UPDATE_STATUS_FILE
+Environment=UPDATE_LOCK_FILE=$UPDATE_LOCK_FILE
+ExecStart=$bash_bin $INSTALL_DIR/update.sh
+TimeoutStartSec=1800
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=$UPDATE_SERVICE_NAME
+EOF
+}
+
+write_update_sudoers_file() {
+  local systemctl_bin
+  local visudo_bin
+  local sudoers_file
+
+  systemctl_bin="$(command -v systemctl)"
+  visudo_bin="$(command -v visudo)"
+  sudoers_file="/etc/sudoers.d/$UPDATE_SERVICE_NAME"
+
+  [[ -n "$systemctl_bin" ]] || fail "systemctl was not found."
+  [[ -n "$visudo_bin" ]] || fail "visudo was not found."
+
+  log "Writing sudoers rule to $sudoers_file"
+  cat >"$sudoers_file" <<EOF
+$APP_USER ALL=(root) NOPASSWD: $systemctl_bin start --no-block $UPDATE_SERVICE_NAME.service
+EOF
+
+  chmod 440 "$sudoers_file"
+  "$visudo_bin" -cf "$sudoers_file" >/dev/null
+}
+
+cleanup_legacy_update_timer() {
+  local timer_path="/etc/systemd/system/$UPDATE_SERVICE_NAME.timer"
+
+  systemctl disable --now "$UPDATE_SERVICE_NAME.timer" >/dev/null 2>&1 || true
+  rm -f "$timer_path"
+}
+
+configure_services() {
+  cleanup_legacy_update_timer
+
   log "Reloading systemd and enabling $SERVICE_NAME"
   systemctl daemon-reload
   systemctl enable --now "$SERVICE_NAME"
+  systemctl reset-failed "$UPDATE_SERVICE_NAME.service" >/dev/null 2>&1 || true
   systemctl status "$SERVICE_NAME" --no-pager || true
 }
 
@@ -221,7 +293,9 @@ main() {
   install_app_dependencies
   write_env_file "$app_home"
   write_service_file
-  enable_service
+  write_update_service_file
+  write_update_sudoers_file
+  configure_services
 
   log "Installation completed."
   log "Login URL: http://<server-ip>:$APP_PORT/login"
@@ -229,6 +303,7 @@ main() {
   log "If you passed ADMIN_PASSWORD, use that password to log in."
   log "If you did not pass ADMIN_PASSWORD, use the generated password shown above."
   log "Environment file: $ENV_FILE"
+  log "Manual update service: $UPDATE_SERVICE_NAME.service"
   log "Open http://<server-ip>:$APP_PORT/login to access the site."
 }
 

@@ -1,0 +1,25 @@
+[Unit]
+Description=Config Manager Web Manual Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/config-manager-web
+Environment=APP_NAME=config-manager-web
+Environment=SERVICE_NAME=config-manager-web
+Environment=INSTALL_DIR=/opt/config-manager-web
+Environment=APP_USER=your-user
+Environment=APP_GROUP=your-user
+Environment=REPO_URL=https://github.com/xiedonge/openaiconfig.git
+Environment=REPO_REF=main
+Environment=DATA_DIR=/opt/config-manager-web/data
+Environment=UPDATE_STATUS_FILE=/opt/config-manager-web/data/system-update.json
+Environment=UPDATE_LOCK_FILE=/opt/config-manager-web/data/system-update.lock
+ExecStart=/usr/bin/bash /opt/config-manager-web/update.sh
+TimeoutStartSec=1800
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=config-manager-web-update

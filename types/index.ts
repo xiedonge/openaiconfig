@@ -1,8 +1,10 @@
-﻿export type AppType = "codex" | "openclaw";
+export type AppType = "codex" | "openclaw";
 
 export type ApplyStatus = "never" | "success" | "failed";
 
 export type TriggerType = "activate" | "restore";
+
+export type SystemUpdateState = "idle" | "running" | "success" | "failed";
 
 export interface ConfigRecord {
   id: number;
@@ -45,4 +47,14 @@ export interface BackupSetRecord {
 export interface SessionUser {
   username: string;
   expiresAt: number;
+}
+
+export interface SystemUpdateStatus {
+  state: SystemUpdateState;
+  message: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  fromCommit: string | null;
+  toCommit: string | null;
+  updatedAt: string | null;
 }

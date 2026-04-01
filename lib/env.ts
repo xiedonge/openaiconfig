@@ -1,4 +1,4 @@
-﻿import path from "node:path";
+import path from "node:path";
 
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 
@@ -8,6 +8,14 @@ function resolveConfiguredDirectory(overrideValue: string | undefined) {
 
 export function getDataDirectory() {
   return path.resolve(process.env.DATA_DIR ?? path.join(process.cwd(), "data"));
+}
+
+export function getUpdateStatusFilePath() {
+  return path.resolve(process.env.UPDATE_STATUS_FILE ?? path.join(getDataDirectory(), "system-update.json"));
+}
+
+export function getUpdateServiceName() {
+  return process.env.UPDATE_SERVICE_NAME ?? "config-manager-web-update.service";
 }
 
 export function getCodexPaths() {

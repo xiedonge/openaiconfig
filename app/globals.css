@@ -344,6 +344,24 @@ a {
   gap: 14px;
 }
 
+.system-update-box {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.system-update-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 420px;
+}
+
+.system-update-text {
+  text-align: right;
+}
+
 .backup-files {
   display: grid;
   gap: 12px;
@@ -369,6 +387,19 @@ a {
   .panel-grid {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .system-update-box {
+    justify-items: stretch;
+  }
+
+  .system-update-meta {
+    justify-content: flex-start;
+    max-width: none;
+  }
+
+  .system-update-text {
+    text-align: left;
   }
 
   .page-shell {
